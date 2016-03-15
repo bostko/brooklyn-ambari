@@ -30,6 +30,7 @@ import java.util.concurrent.ExecutionException;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import com.google.common.base.Predicate;
 import org.apache.brooklyn.api.effector.Effector;
 import org.apache.brooklyn.api.entity.EntityLocal;
 import org.apache.brooklyn.api.entity.EntitySpec;
@@ -100,6 +101,8 @@ public class AmbariClusterImpl extends BasicStartableImpl implements AmbariClust
     private List<String> services;
     private Map<String, List<String>> componentsByNode;
 
+    private List<AmbariHostGroup> hostGroupsWithEmptyHosts;
+
     private Function<AmbariNode, String> mapAmbariNodeToFQDN = new Function<AmbariNode, String>() {
         @Nullable
         @Override
@@ -111,6 +114,8 @@ public class AmbariClusterImpl extends BasicStartableImpl implements AmbariClust
     @Override
     public void init() {
         super.init();
+
+        hostGroupsWithEmptyHosts = Lists.newArrayList();
 
         isHostGroupsDeployment = Iterables.size(getHostGroups()) > 0;
 
@@ -233,12 +238,22 @@ public class AmbariClusterImpl extends BasicStartableImpl implements AmbariClust
         return getConfig(STACK_DEFINITION_URLS);
     }
 
+    // TODO resize with negative and getting to 0
     @Override
-    public void addHostsToHostGroup(String hostgroupName, List<AmbariAgent> hosts) {
+    public void addHostsToHostGroup(final String hostgroupName, List<AmbariAgent> hosts) {
+        AmbariHostGroup hostGroup = Iterables.find(hostGroupsWithEmptyHosts, new Predicate<AmbariHostGroup>() {
+            @Override
+            public boolean apply(@Nullable AmbariHostGroup input) {
+                return input.getDisplayName().equals(hostgroupName);
+            }
+        });
+        deployCluster(ImmutableList.of(hostGroup));
+
         final Maybe<Effector<?>> effector = EffectorUtils.findEffector(getMasterAmbariServer().getEntityType().getEffectors(), "addHostsToHostGroup");
         if (effector.isAbsentOrNull()) {
             throw new IllegalStateException("Cannot get the addHostsToHostGroup effector");
         }
+
         getMasterAmbariServer().invoke(effector.get(), ImmutableMap.of(
                 "Blueprint Name", BLUEPRINT_NAME,
                 "Hostgroup Name", hostgroupName,
@@ -248,7 +263,11 @@ public class AmbariClusterImpl extends BasicStartableImpl implements AmbariClust
     }
 
     @Override
-    public void deployCluster() throws AmbariApiException, ExtraServiceException {
+    public void deployCluster() {
+        deployCluster(getHostGroups());
+    }
+
+    private void deployCluster(Iterable<AmbariHostGroup> hostGroups) throws AmbariApiException, ExtraServiceException {
         // Set the flag to true so the deployment won't happen multiple times
         setAttribute(CLUSTER_SERVICES_INITIALISE_CALLED, true);
 
@@ -261,7 +280,16 @@ public class AmbariClusterImpl extends BasicStartableImpl implements AmbariClust
 
         if (isHostGroupsDeployment) {
             LOG.info("{} getting the recommendation from AmbariHostGroup configuration", this);
-            recommendationWrapper = getRecommendationWrapperFromAmbariHostGroups();
+            recommendationWrapper = getRecommendationWrapperFromAmbariHostGroups(Iterables.filter(hostGroups, new Predicate<AmbariHostGroup>() {
+                @Override
+                public boolean apply(@Nullable AmbariHostGroup input) {
+                    boolean selected = !input.getHostFQDNs().isEmpty();
+                    if (!selected) {
+                        hostGroupsWithEmptyHosts.add(input);
+                    }
+                    return selected;
+                }
+            }));
         } else {
             LOG.info("{} getting the recommendation from Ambari for the services: {}", this, services);
             recommendationWrapper = getRecommendationWrapperFromAmbariServer();
@@ -370,11 +398,11 @@ public class AmbariClusterImpl extends BasicStartableImpl implements AmbariClust
         return serverSpec;
     }
 
-    private RecommendationWrapper getRecommendationWrapperFromAmbariHostGroups() {
+    private RecommendationWrapper getRecommendationWrapperFromAmbariHostGroups(Iterable<AmbariHostGroup> ambariHostGroups) {
         final Blueprint.Builder blueprintBuilder = new Blueprint.Builder();
         final Bindings.Builder bindingsBuilder = new Bindings.Builder();
 
-        for (AmbariHostGroup ambariHostGroup : getHostGroups()) {
+        for (AmbariHostGroup ambariHostGroup : ambariHostGroups) {
             HostGroup.Builder hostGroupBuilder = new HostGroup.Builder()
                     .setName(ambariHostGroup.getDisplayName())
                     .addComponents(ambariHostGroup.getComponents());
@@ -488,6 +516,7 @@ public class AmbariClusterImpl extends BasicStartableImpl implements AmbariClust
 
         if (isHostGroupsDeployment) {
             for (AmbariHostGroup hostGroup : getHostGroups()) {
+                // FIXME zero case
                 agentsToExpect += hostGroup.getConfig(AmbariHostGroup.INITIAL_SIZE);
             }
         } else {

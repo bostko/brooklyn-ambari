@@ -76,6 +76,7 @@ public class AmbariHostGroupImpl extends DynamicClusterImpl implements AmbariHos
     public Collection<Entity> resizeByDelta(int delta) {
         Collection<Entity> entities = super.resizeByDelta(delta);
 
+        // TODO resize by delta < 0
         if (delta > 0) {
             EtcHostsManager.setHostsOnMachines(getAmbariCluster().getAmbariNodes(), getConfig(AmbariCluster.ETC_HOST_ADDRESS));
             if (getAmbariCluster().isClusterComplete()) {

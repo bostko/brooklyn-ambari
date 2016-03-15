@@ -20,14 +20,12 @@
 package io.brooklyn.ambari.server;
 
 import java.net.URI;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nullable;
 
-import io.brooklyn.ambari.rest.domain.HostGroup;
 import org.apache.brooklyn.api.entity.Entity;
 import org.apache.brooklyn.api.mgmt.Task;
 import org.apache.brooklyn.core.annotation.EffectorParam;
@@ -87,9 +85,6 @@ public class AmbariServerImpl extends SoftwareProcessImpl implements AmbariServe
     private String ambariUri;
 
     private RestAdapter restAdapter;
-
-    private Map<String, HostGroup> confHostGroups;
-    private Map<String, HostGroup> nonZeroHostGroups;
 
     //TODO clearly needs changed
     private UsernamePasswordCredentials usernamePasswordCredentials = new UsernamePasswordCredentials("admin", "admin");
@@ -215,22 +210,10 @@ public class AmbariServerImpl extends SoftwareProcessImpl implements AmbariServe
                     .put("Blueprints", recommendationWrapper.getStack())
                     .build());
 
-            List<HostGroup> confHostGroupsList = recommendationWrapper.getRecommendation().getBindings().getHostGroups();
-            List<HostGroup>  nonZeroHostGroupList = new LinkedList<>();
-
-            for(HostGroup hostGroupN:confHostGroupsList){
-                confHostGroups.put(hostGroupN.getName(), hostGroupN);
-                int size=hostGroupN.getHosts().size();
-                if(size>0){
-                    nonZeroHostGroupList.add(hostGroupN);
-                    nonZeroHostGroups.put(hostGroupN.getName(), hostGroupN);
-                }
-            }
-
             return restAdapter.create(ClusterEndpoint.class).createCluster(clusterName, ImmutableMap.builder()
                     .put("blueprint", blueprintName)
                     .put("default_password", "admin")
-                    .put("host_groups", nonZeroHostGroupList)
+                    .put("host_groups", recommendationWrapper.getRecommendation().getBindings().getHostGroups())
                     .build());
         } catch (RetrofitError retrofitError) {
             throw new AmbariApiException(retrofitError);
@@ -357,21 +340,8 @@ public class AmbariServerImpl extends SoftwareProcessImpl implements AmbariServe
 
     @Override
     public void addHostsToHostGroup(final String blueprintName, final String hostgroupName, final List<String> hosts, final String cluster) {
-        if (hosts.isEmpty()) return;
-
         Iterable<Map> hostGroupMapping = Iterables.transform(hosts, fqdnsToMaps(blueprintName, hostgroupName));
         LOG.info("hosts " + hostGroupMapping.iterator().hasNext());
-
-        if (!confHostGroups.containsKey(hostgroupName)) {
-            confHostGroups.put(hostgroupName, createHostGroup());
-            nonZeroHostGroups.put(hostgroupName, updateHostGroup());
-            addNewHostGroup(confHostGroups.get(hostgroupName), cluster);
-        }
-
-        if (confHostGroups.get(hostgroupName).getHosts().isEmpty()) {
-            nonZeroHostGroups.put(hostgroupName, updateHostGroup());
-            addNewHostGroup(confHostGroups.get(hostgroupName), cluster);
-        }
 
         HostEndpoint hostEndpoint = restAdapter.create(HostEndpoint.class);
         Request request = hostEndpoint.addHosts(
@@ -385,19 +355,6 @@ public class AmbariServerImpl extends SoftwareProcessImpl implements AmbariServe
                 .build()
                 .run();
     }
-
-    //TODO
-    private HostGroup createHostGroup(){
-        return new HostGroup();
-    }
-
-    //TODO
-    private HostGroup updateHostGroup(){
-        return new HostGroup();
-    }
-
-    //TODO
-    private void addNewHostGroup(HostGroup hostGroup, final String cluster) {    }
 
     private Function<String, Map> fqdnsToMaps(final String blueprintName, final String hostgroupName) {
         return new Function<String, Map>() {
