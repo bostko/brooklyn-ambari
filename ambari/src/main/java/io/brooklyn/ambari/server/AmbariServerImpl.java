@@ -467,12 +467,6 @@ public class AmbariServerImpl extends SoftwareProcessImpl implements AmbariServe
             }
             usernamePasswordCredentials = new UsernamePasswordCredentials(USERNAME, password);
 
-            restAdapter = new RestAdapter.Builder()
-                    .setEndpoint(ambariUri)
-                    .setRequestInterceptor(new AmbariRequestInterceptor(new UsernamePasswordCredentials(USERNAME, INITIAL_PASSWORD)))
-                    .setLogLevel(RestAdapter.LogLevel.FULL)
-                    .build();
-
             ImmutableMap<String, ImmutableMap<String, String>> userRequest = ImmutableMap.of("Users", ImmutableMap.of(
                     "user_name", USERNAME,
                     "old_password", INITIAL_PASSWORD,
@@ -480,6 +474,12 @@ public class AmbariServerImpl extends SoftwareProcessImpl implements AmbariServe
             ));
 
             restAdapter.create(UsersEndpoint.class).updateUser(userRequest);
+
+            restAdapter = new RestAdapter.Builder()
+                    .setEndpoint(ambariUri)
+                    .setRequestInterceptor(new AmbariRequestInterceptor(new UsernamePasswordCredentials(USERNAME, password)))
+                    .setLogLevel(RestAdapter.LogLevel.FULL)
+                    .build();
 
             sensors().set(AmbariServer.PASSWORD, password);
         }
