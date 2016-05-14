@@ -456,6 +456,7 @@ public class AmbariClusterImpl extends BasicStartableImpl implements AmbariClust
         for (AmbariHostGroup ambariHostGroup : getHostGroups()) {
             HostGroup.Builder hostGroupBuilder = new HostGroup.Builder()
                     .setName(ambariHostGroup.getDisplayName())
+                    .setAmbariHostGroup(ambariHostGroup)
                     .addComponents(ambariHostGroup.getComponents());
             if (componentsByNode.containsKey(ambariHostGroup.getDisplayName())) {
                 hostGroupBuilder.addComponents(componentsByNode.get(ambariHostGroup.getDisplayName()));

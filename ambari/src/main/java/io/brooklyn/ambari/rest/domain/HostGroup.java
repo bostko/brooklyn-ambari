@@ -24,6 +24,7 @@ import java.util.Map;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import io.brooklyn.ambari.hostgroup.AmbariHostGroup;
 import org.apache.brooklyn.util.collections.MutableList;
 import org.apache.brooklyn.util.collections.MutableMap;
 
@@ -43,6 +44,8 @@ public class HostGroup {
 
     @SerializedName("hosts")
     private List<Map<String, String>> hosts;
+
+    private transient AmbariHostGroup ambariHostGroup;
 
     public HostGroup() {
         this.configurations = MutableList.of();
@@ -70,11 +73,16 @@ public class HostGroup {
         return hosts;
     }
 
+    public AmbariHostGroup getAmbariHostGroup() {
+        return ambariHostGroup;
+    }
+
     public static class Builder {
 
         private String name;
         private final List<String> components;
         private final List<String> hosts;
+        private AmbariHostGroup ambariHostGroup;
 
         public Builder() {
             this.components = MutableList.of();
@@ -83,6 +91,11 @@ public class HostGroup {
 
         public Builder setName(String name) {
             this.name = name;
+            return this;
+        }
+
+        public Builder setAmbariHostGroup(AmbariHostGroup ambariHostGroup) {
+            this.ambariHostGroup = ambariHostGroup;
             return this;
         }
 
@@ -115,6 +128,7 @@ public class HostGroup {
 
             HostGroup hostGroup = new HostGroup();
             hostGroup.name = this.name;
+            hostGroup.ambariHostGroup = this.ambariHostGroup;
             for (String component : components) {
                 hostGroup.components.add(new HostComponent.Builder().setName(component).build());
             }
